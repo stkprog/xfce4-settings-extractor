@@ -62,7 +62,11 @@ def get_all_properties_of_channel(channel_name : str) -> list:
         if "<" in line_content or ">" in line_content:
             result[line] = insert_escape_backslash_at_angle_brackets(line_content)
 
-    result = filter(lambda x : not x.startswith("/plugins/") and not x == "/general/button_layout", result)
+    # print("\nbefore:")
+    # print(result)
+    # result = list(filter(lambda x : not x.startswith("/plugins/") and not x == "/general/button_layout", result))
+
+    # print("\n\nafter:\n" + str(result))
     return result
 
 def insert_escape_backslash_at_angle_brackets(to_be_converted : str) -> str:
@@ -76,13 +80,15 @@ def handle_array(property_value : str) -> list:
     # Pop the first two because they're irrelevant
     value_array.pop(0)
     value_array.pop(0)
-
+    
     for line in range(len(value_array)):
-        print("\n\n" + value_array[line] + " -> ")
+        # If the current line in the value array is a number, replace commas with dots
         if is_numeric(value_array[line]):
             value_array[line] = handle_numeric(value_array[line])
+        # If the current line in the value array is a string, add double quotes around it and remove new line character
         else:
             value_array[line] = "\"" + value_array[line].strip("\n") + "\""
+    print(str(value_array))
 
     return value_array
 
@@ -143,6 +149,7 @@ first = True
 
 # Loop through every channel
 for channel in get_needed_channels():
+    # Space between channels, but not on the first one
     if first is True:
         first = False
     else:
@@ -165,14 +172,19 @@ for channel in get_needed_channels():
             property_value = property_value.replace(old_string, new_string)
 
         # Handle arrays
-        if "Wert ist ein Feld mit" in property_value:
+        property_value_lines = len(property_value.splitlines())
+        # Output such as "Value is an array with 1 items: \n\n value_1" has THREE lines
+        if property_value_lines >= 3:
             property_value = handle_array(property_value)
+            # Every item in the array must be added individually like this
             for line in property_value:
                 final_script_content += " -s " + line
+            # If value is an array with one item, add this needed flag
+            if property_value_lines == 3:
+                final_script_content += " --force-array "
         # Everything else
         else:
             if is_numeric(property_value):
-                print("\n\n" + property_value + " -> ")
                 property_value = handle_numeric(property_value)
             else:
                 property_value = "\"" + property_value.strip("\n") + "\""
