@@ -24,15 +24,15 @@ import re       # Regular expressions
 
 def get_channel_header(channel_name : str) -> str:
     """Returns a nice header for the current channel in the output script."""
-    header = "#\n"
+    header : str = "#\n"
     header += "#    Channel: " + channel_name + "\n"
     header += "#\n"
     return header
 
-def get_needed_channels() -> list:
+def get_needed_channels() -> list[str]:
     """Get the specified channels using the shell command xfconf-query."""
-    all_channels = []
-    needed_channels = []
+    all_channels : list[str] = []
+    needed_channels : list[str] = []
     all_channels = os.popen("xfconf-query -l").read().splitlines()
     all_channels.pop(0) # First line just reads "Channels:", unneeded
     for i in range(len(all_channels)):
@@ -43,7 +43,7 @@ def get_needed_channels() -> list:
         needed_channels = all_channels
     # Only get channels for "visual" configurations
     else:
-        visuals_channels = ["xfce4-desktop", "xfce4-panel", "xfce4-terminal", "xfwm4", "xsettings", "xfce4-notifyd"]
+        visuals_channels : list[str] = ["xfce4-desktop", "xfce4-panel", "xfce4-terminal", "xfwm4", "xsettings", "xfce4-notifyd"]
         # Check if these channels are available on the current system
         for c in visuals_channels:
             if c in all_channels:
@@ -51,32 +51,27 @@ def get_needed_channels() -> list:
 
     return needed_channels
 
-def get_all_properties_of_channel(channel_name : str) -> list:
+def get_all_properties_of_channel(channel_name : str) -> list[str]:
     """Get all available properties for the specified channel"""
     # Get all properties in the form of a list
-    result = os.popen("xfconf-query -c " + channel_name + " -l").read().splitlines()
+    result : list[str] = os.popen("xfconf-query -c " + channel_name + " -l").read().splitlines()
 
     for line in range(len(result)):
-        line_content = result[line]
+        line_content : str = result[line]
 
         if "<" in line_content or ">" in line_content:
             result[line] = insert_escape_backslash_at_angle_brackets(line_content)
 
-    # print("\nbefore:")
-    # print(result)
-    # result = list(filter(lambda x : not x.startswith("/plugins/") and not x == "/general/button_layout", result))
-
-    # print("\n\nafter:\n" + str(result))
     return result
 
 def insert_escape_backslash_at_angle_brackets(to_be_converted : str) -> str:
     """Insert the escape character at angle brackets so the resulting shell script will work."""
     return to_be_converted.replace("<", "\\<").replace(">", "\\>")
 
-def handle_array(property_value : str) -> list:
+def handle_array(property_value : str) -> list[str]:
     """Process a property holding an array of values, rather than a single value, correctly."""
     # Split the string into an array of lines
-    value_array = property_value.splitlines()
+    value_array : list[str] = property_value.splitlines()
     # Pop the first two because they're irrelevant
     value_array.pop(0)
     value_array.pop(0)
@@ -88,13 +83,11 @@ def handle_array(property_value : str) -> list:
         # If the current line in the value array is a string, add double quotes around it and remove new line character
         else:
             value_array[line] = "\"" + value_array[line].strip("\n") + "\""
-    print(str(value_array))
 
     return value_array
 
 def is_numeric(value : str) -> bool:
     """Check if the given string is numeric."""
-    # print(re.search("[+0-9],[+0-9]", value) is not None or value.strip().isdecimal())
     if re.search("[+0-9],[+0-9]", value) is not None or value.isdecimal():
         return True
     else:
@@ -104,12 +97,12 @@ def handle_numeric(value : str) -> bool:
     """Convert commas (,) in the given string to dots (.)."""
     return value.replace(",", ".")
 
-def handle_rgb(rgb_array : list) -> list:
+def handle_rgb(rgb_array : list[str]) -> list[str]:
     """
     Returns a hex-value array based on an array of rgb-values.
     E.g.: ["rgb(255,255,255)", "rgb(0, 0, 0)"] is converted to ["#FFFFFF", "#000000"].
     """
-    hex_array = []
+    hex_array : list[str] = []
     for value in rgb_array:
         hex_array.append(rgb_to_hex(value))
     return hex_array
@@ -139,13 +132,13 @@ elif len(sys.argv) > 3:
     quit()
 
 # Regular expression used for finding RGB values
-RGB_REGEX = r"rgb\([0-9]+,{1}[0-9]+,{1}[0-9]+\)"
+RGB_REGEX : str = r"rgb\([0-9]+,{1}[0-9]+,{1}[0-9]+\)"
 
 # Holds the entire shell script that gets genereated in the form of a string
-final_script_content = ""
+final_script_content : str = ""
 
 # If it's the first loop, newlines won't be printed
-first = True
+first : bool = True
 
 # Loop through every channel
 for channel in get_needed_channels():
@@ -160,19 +153,19 @@ for channel in get_needed_channels():
     # Loop through every property in the current channel
     for property in get_all_properties_of_channel(channel):
         final_script_content += "xfconf-query -c " + channel + " -p " + property
-        property_value = os.popen("xfconf-query -c " + channel + " -p " + property).read()
+        property_value : str = os.popen("xfconf-query -c " + channel + " -p " + property).read()
 
         # Handle RGB values   
         if re.search(RGB_REGEX, property_value) is not None:
-            old_values = re.findall(RGB_REGEX, property_value)
+            old_values : list[str] = re.findall(RGB_REGEX, property_value)
             # concatenate list elements with ; as separator
-            old_string = ";".join(old_values)
-            new_values = handle_rgb(re.findall(RGB_REGEX, property_value))
-            new_string = ";".join(new_values)
-            property_value = property_value.replace(old_string, new_string)
+            old_string : str = ";".join(old_values)
+            new_values : list[str ]= handle_rgb(re.findall(RGB_REGEX, property_value))
+            new_string : str = ";".join(new_values)
+            property_value : str = property_value.replace(old_string, new_string)
 
         # Handle arrays
-        property_value_lines = len(property_value.splitlines())
+        property_value_lines : int = len(property_value.splitlines())
         # Output such as "Value is an array with 1 items: \n\n value_1" has THREE lines
         if property_value_lines >= 3:
             property_value = handle_array(property_value)
@@ -193,7 +186,7 @@ for channel in get_needed_channels():
         final_script_content += "\n"
 
 # Write script string to file
-script_name = ""
+script_name : str = ""
 if (sys.argv[1] == "-a" or sys.argv[1] == "--all"):
     script_name = sys.argv[2]
 else:
