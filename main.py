@@ -191,6 +191,9 @@ if (sys.argv[1] == "-a" or sys.argv[1] == "--all"):
     script_name = sys.argv[2]
 else:
     script_name = sys.argv[1]
-final_script = open(script_name + ".sh", "w")
-final_script.write(final_script_content)
-final_script.close()
+
+if not script_name.endswith(".sh"):
+    script_name += ".sh"
+
+with open(script_name, "w") as final_script:
+    final_script.write(final_script_content)
