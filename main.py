@@ -19,7 +19,7 @@
 
 import os       # To use shell commands
 import typing   # Type hinting
-import sys      # To use command line arguments
+import click
 import re       # Regular expressions
 
 def get_channel_header(channel_name : str) -> str:
@@ -29,7 +29,7 @@ def get_channel_header(channel_name : str) -> str:
     header += "#\n"
     return header
 
-def get_needed_channels() -> list[str]:
+def get_needed_channels(get_all : bool) -> list[str]:
     """Get the specified channels using the shell command xfconf-query."""
     all_channels : list[str] = []
     needed_channels : list[str] = []
@@ -39,7 +39,7 @@ def get_needed_channels() -> list[str]:
         all_channels[i] = all_channels[i].strip()
 
     # Get all channels
-    if "-a" in sys.argv or "--all" in sys.argv:
+    if get_all == True:
         needed_channels = all_channels
     # Only get channels for "visual" configurations
     else:
@@ -68,6 +68,10 @@ def insert_escape_backslash_at_angle_brackets(to_be_converted : str) -> str:
     """Insert the escape character at angle brackets so the resulting shell script will work."""
     return to_be_converted.replace("<", "\\<").replace(">", "\\>")
 
+def insert_escape_backslash_at_double_quote(to_be_converted : str) -> str:
+    """Insert the escape character at double quotes so the resulting script will set the correct values."""
+    return to_be_converted.replace("\"", "\\\"")
+
 def handle_array(property_value : str) -> list[str]:
     """Process a property holding an array of values, rather than a single value, correctly."""
     # Split the string into an array of lines
@@ -82,6 +86,10 @@ def handle_array(property_value : str) -> list[str]:
             value_array[line] = handle_numeric(value_array[line])
         # If the current line in the value array is a string, add double quotes around it and remove new line character
         else:
+            # If there's double quotes already present, add escape character
+            if "\"" in value_array[line]:
+                value_array[line] = insert_escape_backslash_at_double_quote(value_array[line])
+            # Add double quotes around whole string
             value_array[line] = "\"" + value_array[line].strip("\n") + "\""
 
     return value_array
@@ -100,7 +108,7 @@ def handle_numeric(value : str) -> bool:
 def handle_rgb(rgb_array : list[str]) -> list[str]:
     """
     Returns a hex-value array based on an array of rgb-values.
-    E.g.: ["rgb(255,255,255)", "rgb(0, 0, 0)"] is converted to ["#FFFFFF", "#000000"].
+    E.g.: ["rgb(255,255,255)", "rgb(0, 0, 0)"] is converted to ["#ffffff", "#000000"].
     """
     hex_array : list[str] = []
     for value in rgb_array:
@@ -110,90 +118,109 @@ def handle_rgb(rgb_array : list[str]) -> list[str]:
 def rgb_to_hex(rgb_string : str) -> str:
     """
     Returns a hex-value based on an rgb-value.
-    E.g.: "#FF00FF" is converted to "rgb(255,0,255)".
+    E.g.: "#ff00ff" is converted to "rgb(255,0,255)".
     """
     tuple = re.findall(r"[0-9]+", rgb_string)
     r = int(tuple[0])
     g = int(tuple[1])
     b = int(tuple[2])
+    # x == lowercase hexadecimal
+    # 02 == string should be left-filled with zeroes to a length of 2 if needed
     return "#{:02x}{:02x}{:02x}".format(r, g, b)
 
+def check_script_name(script_name : str) -> str:
+    """Appends '.sh' to the end of the script name if the file extension is not given yet."""
+    if not script_name.endswith(".sh"):
+        script_name += ".sh"
+    return script_name
 
-# Main Script
+def get_destination_path(output : click.Path, script_name : str) -> str:
+    if (not str(output).endswith("/")) and not script_name.startswith("/"):
+        output += "/"
+    return output + script_name
 
-# Check if user has given a scriptname, if not, quit the program
-if len(sys.argv) < 2:
-    print("\nYou need to include a name for your resulting script!")
-    print("E.g.:")
-    print("> python xfce4-theme-extractor cool_settings\n")
-    quit()
-elif len(sys.argv) > 3:
-    print("\nInvalid amount of arguments.")
-    quit()
+def main_loop(all_channels : bool) -> str:
+    # Regular expression used for finding RGB values
+    RGB_REGEX : str = r"rgb\([0-9]+,{1}[0-9]+,{1}[0-9]+\)"
 
-# Regular expression used for finding RGB values
-RGB_REGEX : str = r"rgb\([0-9]+,{1}[0-9]+,{1}[0-9]+\)"
+    # Holds the entire shell script that gets genereated in the form of a string
+    final_script_content : str = ""
 
-# Holds the entire shell script that gets genereated in the form of a string
-final_script_content : str = ""
+    # If it's the first loop, newlines won't be printed
+    first : bool = True
 
-# If it's the first loop, newlines won't be printed
-first : bool = True
-
-# Loop through every channel
-for channel in get_needed_channels():
-    # Space between channels, but not on the first one
-    if first is True:
-        first = False
-    else:
-        final_script_content += "\n\n"
-
-    final_script_content += get_channel_header(channel)
-
-    # Loop through every property in the current channel
-    for property in get_all_properties_of_channel(channel):
-        final_script_content += "xfconf-query -c " + channel + " -p " + property
-        property_value : str = os.popen("xfconf-query -c " + channel + " -p " + property).read()
-
-        # Handle RGB values   
-        if re.search(RGB_REGEX, property_value) is not None:
-            old_values : list[str] = re.findall(RGB_REGEX, property_value)
-            # concatenate list elements with ; as separator
-            old_string : str = ";".join(old_values)
-            new_values : list[str ]= handle_rgb(re.findall(RGB_REGEX, property_value))
-            new_string : str = ";".join(new_values)
-            property_value : str = property_value.replace(old_string, new_string)
-
-        # Handle arrays
-        property_value_lines : int = len(property_value.splitlines())
-        # Output such as "Value is an array with 1 items: \n\n value_1" has THREE lines
-        if property_value_lines >= 3:
-            property_value = handle_array(property_value)
-            # Every item in the array must be added individually like this
-            for line in property_value:
-                final_script_content += " -s " + line
-            # If value is an array with one item, add this needed flag
-            if property_value_lines == 3:
-                final_script_content += " --force-array "
-        # Everything else
+    # Loop through every channel
+    for channel in get_needed_channels(all_channels):
+        # Space between channels, but not on the first one
+        if first is True:
+            first = False
         else:
-            if is_numeric(property_value):
-                property_value = handle_numeric(property_value)
+            final_script_content += "\n\n"
+
+        final_script_content += get_channel_header(channel)
+
+        # Loop through every property in the current channel
+        for property in get_all_properties_of_channel(channel):
+            final_script_content += "xfconf-query -c " + channel + " -p " + property
+            property_value : str = os.popen("xfconf-query -c " + channel + " -p " + property).read()
+
+            # Handle RGB values   
+            if re.search(RGB_REGEX, property_value) is not None:
+                old_values : list[str] = re.findall(RGB_REGEX, property_value)
+                # concatenate list elements with ; as separator
+                old_string : str = ";".join(old_values)
+                new_values : list[str ]= handle_rgb(re.findall(RGB_REGEX, property_value))
+                new_string : str = ";".join(new_values)
+                property_value : str = property_value.replace(old_string, new_string)
+
+            # Handle arrays
+            property_value_lines : int = len(property_value.splitlines())
+            # Output such as "Value is an array with 1 items: \n\n value_1" has THREE lines
+            if property_value_lines >= 3:
+                property_value = handle_array(property_value)
+                # Every item in the array must be added individually like this
+                for line in property_value:
+                    final_script_content += " -s " + line
+                # If value is an array with one item, add this needed flag
+                if property_value_lines == 3:
+                    final_script_content += " --force-array "
+            # Everything else
             else:
-                property_value = "\"" + property_value.strip("\n") + "\""
-            final_script_content += " -s " + property_value
+                if is_numeric(property_value):
+                    property_value = handle_numeric(property_value)
+                else:
+                    if "\"" in property_value:
+                        property_value = insert_escape_backslash_at_double_quote(property_value)
+                    property_value = "\"" + property_value.strip("\n") + "\""
+                final_script_content += " -s " + property_value
 
-        final_script_content += "\n"
+            final_script_content += "\n"
+    return final_script_content
 
-# Write script string to file
-script_name : str = ""
-if (sys.argv[1] == "-a" or sys.argv[1] == "--all"):
-    script_name = sys.argv[2]
-else:
-    script_name = sys.argv[1]
+# Make sure that "-h" is a valid option as well
+CLICK_SETTINGS : dict = dict(help_option_names=["-h", "--help"])
+@click.command(context_settings=CLICK_SETTINGS)
+@click.option(
+    "-a", "--all",
+    help="Extract settings from all available xfconf channels.\nDefault: Only visual channels.",
+    is_flag=True    # False if --all is not set, True if it is
+)
+@click.option(
+    "-o", "--output",
+    help="Destination of the .sh-script.                   \nDefault: Current working directory.",
+    type=click.Path(file_okay=False, dir_okay=True, readable=True, writable=True, exists=True),
+    default="."
+)
+@click.argument("script_name")
+def enter(all : bool, output : click.Path, script_name : str):
+    """Entrypoint of the program. Uses the parameters from the click options / arguments."""
+    script_name = check_script_name(script_name)
+    
+    final_path : str = get_destination_path(output, script_name)
+    final_script_content : str = main_loop(all)
 
-if not script_name.endswith(".sh"):
-    script_name += ".sh"
+    # Write script string to file
+    with open(final_path, "w") as final_script:
+        final_script.write(final_script_content)
 
-with open(script_name, "w") as final_script:
-    final_script.write(final_script_content)
+enter()
