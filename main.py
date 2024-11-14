@@ -19,7 +19,7 @@
 
 import os       # To use shell commands
 import typing   # Type hinting
-import click
+import click    # For creating a neat command line interface with options / flags
 import re       # Regular expressions
 
 def get_channel_header(channel_name : str) -> str:
@@ -89,7 +89,7 @@ def handle_array(property_value : str) -> list[str]:
             # If there's double quotes already present, add escape character
             if "\"" in value_array[line]:
                 value_array[line] = insert_escape_backslash_at_double_quote(value_array[line])
-            # Add double quotes around whole string
+            # Add double quotes around whole string and remove new line character
             value_array[line] = "\"" + value_array[line].strip("\n") + "\""
 
     return value_array
@@ -135,11 +135,18 @@ def check_script_name(script_name : str) -> str:
     return script_name
 
 def get_destination_path(output : click.Path, script_name : str) -> str:
+    """Combines the destination path and the script name."""
     if (not str(output).endswith("/")) and not script_name.startswith("/"):
         output += "/"
     return output + script_name
 
 def main_loop(all_channels : bool) -> str:
+    """
+    Main loop of the program.
+    Returns a string containing the content of the
+    finished shell script, using the utility functions
+    in this program to do so.
+    """
     # Regular expression used for finding RGB values
     RGB_REGEX : str = r"rgb\([0-9]+,{1}[0-9]+,{1}[0-9]+\)"
 
@@ -186,11 +193,15 @@ def main_loop(all_channels : bool) -> str:
                     final_script_content += " --force-array "
             # Everything else
             else:
+                # If the current value is a number, replace commas with dots
                 if is_numeric(property_value):
                     property_value = handle_numeric(property_value)
+                # If the current line in the value array is a string, add double quotes around it and remove new line character
                 else:
+                    # If there's double quotes already present, add escape character
                     if "\"" in property_value:
                         property_value = insert_escape_backslash_at_double_quote(property_value)
+                    # Add double quotes around whole string and remove new line character
                     property_value = "\"" + property_value.strip("\n") + "\""
                 final_script_content += " -s " + property_value
 
