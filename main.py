@@ -29,31 +29,27 @@ def get_channel_header(channel_name : str) -> str:
     header += "#\n"
     return header
 
-def get_all_channels() -> list:
-    """Get all available channels using the shell command xfconf-query."""
+def get_needed_channels() -> list:
+    """Get the specified channels using the shell command xfconf-query."""
+    all_channels = []
     needed_channels = []
+    all_channels = os.popen("xfconf-query -l").read().splitlines()
+    all_channels.pop(0) # First line just reads "Channels:", unneeded
+    for i in range(len(all_channels)):
+        all_channels[i] = all_channels[i].strip()
+
+    # Get all channels
     if "-a" in sys.argv or "--all" in sys.argv:
-        needed_channels = [
-            "displays", "keyboard-layout", "keyboards", "parole", "pointers", "ristretto", "thunar", "thunar-volman", "xfce4-appfinder", "xfce4-desktop", "xfce4-keyboard-shortcuts", "xfce4-notifyd", "xfce4-panel", "xfce4-power-manager", "xfce4-screensaver", "xfce4-screenshooter", "xfce4-session", "xfce4-taskmanager", "xfce4-terminal", "xfwm4", "xsettings"
-        ]
+        needed_channels = all_channels
+    # Only get channels for "visual" configurations
     else:
-        needed_channels = ["xfce4-desktop", "xfce4-panel", "xfce4-terminal", "xfwm4", "xsettings", "xfce4-notifyd"]
-    
-    # Get all channels in the form of a list
-    result = os.popen("xfconf-query -l").read().splitlines()
+        visuals_channels = ["xfce4-desktop", "xfce4-panel", "xfce4-terminal", "xfwm4", "xsettings", "xfce4-notifyd"]
+        # Check if these channels are available on the current system
+        for c in visuals_channels:
+            if c in all_channels:
+                needed_channels.append(c)
 
-    # The first line is not a channel, pop it
-    result.pop(0)
-
-    # keep only the needed channels
-    new_result = []
-    for line in range(len(result)):
-        # remove whitespace from the left
-        line_stripped = result[line].strip()
-        if line_stripped in needed_channels:
-            new_result.append(line_stripped)
-
-    return new_result
+    return needed_channels
 
 def get_all_properties_of_channel(channel_name : str) -> list:
     """Get all available properties for the specified channel"""
@@ -146,7 +142,7 @@ final_script_content = ""
 first = True
 
 # Loop through every channel
-for channel in get_all_channels():
+for channel in get_needed_channels():
     if first is True:
         first = False
     else:
