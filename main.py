@@ -156,6 +156,12 @@ def main_loop(all_channels : bool) -> str:
     # If it's the first loop, newlines won't be printed
     first : bool = True
 
+    # These properties of the thunar channel hold a string-value
+    # containing a comma-separated list of numbers
+    # As such, values of these properties should NOT be processed by handle_numeric()
+    # A dot-seperated list in these settings can / will prevent Thunar from starting
+    comma_separated_settings = ["/last-toolbar-item-order", "/last-toolbar-visible-buttons", "/last-details-view-column-widths"]
+
     # Loop through every channel
     for channel in get_needed_channels(all_channels):
         # Space between channels, but not on the first one
@@ -194,7 +200,7 @@ def main_loop(all_channels : bool) -> str:
             # Everything else
             else:
                 # If the current value is a number, replace commas with dots
-                if is_numeric(property_value):
+                if is_numeric(property_value) and property not in comma_separated_settings:
                     property_value = handle_numeric(property_value)
                 # If the current line in the value array is a string, add double quotes around it and remove new line character
                 else:
